@@ -1,0 +1,50 @@
+﻿@using FinanceApp.Shared.Models.News
+@inherits FinanceApp.Client.Pages.Utilities.ImageDecoder
+@if (ItemDto != null)
+{
+    <MudCard>
+        <MudCardHeader>
+            <CardHeaderContent>
+                <MudText Typo="Typo.body2">@($"{ItemDto.NewsResultDto.PublishedUtc:g}")</MudText>
+                <MudText Typo="Typo.body1"> @ItemDto.NewsResultDto.Publisher.Name</MudText>
+            </CardHeaderContent>
+        </MudCardHeader>
+        @if (ItemDto.ImageDto != null)
+        {
+            <a href="@ItemDto.NewsResultDto.ArticleUrl" target="_blank">
+                <MudCardMedia Image="@ConvertToBase64(ItemDto.ImageDto)" Height="150"/>
+            </a>
+        }
+        <MudCardContent>
+            <a href="@ItemDto.NewsResultDto.ArticleUrl" target="_blank">
+                <MudText Typo="Typo.body1">
+                    <b>@TruncateString(ItemDto.NewsResultDto.Title, 50)</b>
+                </MudText>
+            </a>
+            @if (ItemDto.NewsResultDto.Description != null)
+            {
+                <MudText Typo="Typo.body2">@TruncateString(ItemDto.NewsResultDto.Description, 125)</MudText>
+            }
+        </MudCardContent>
+    </MudCard>
+}
+else
+{
+    <MudText Typo="Typo.body1">No content to display</MudText>
+}
+
+
+@code {
+
+    [Parameter]
+    public NewsResultImageDto? ItemDto { get; set; }
+
+   
+
+    private static string TruncateString(string s, int length)
+    {
+        if (Math.Min(s.Length, length) == s.Length) return s;
+        return s[..length] + "...";
+    }
+
+}

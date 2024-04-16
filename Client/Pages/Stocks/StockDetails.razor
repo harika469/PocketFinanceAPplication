@@ -1,0 +1,217 @@
+﻿@inject HttpClient Http
+@inject AuthenticationStateProvider AuthStateProvider
+@inject ISnackbar Snackbar
+@using FinanceApp.Shared.Models
+@using FinanceApp.Shared.Models.TickerDetails
+@using System.Text.Json
+@using System.Text
+@using FinanceApp.Client.Pages.Stocks.News
+@using ValueType = Syncfusion.Blazor.Charts.ValueType
+@inherits FinanceApp.Client.Pages.Utilities.ImageDecoder
+
+<CascadingValue Value="previousTicker" Name="PreviousTicker">
+    <CascadingValue Value="SelectedTicker" Name="SelectedTicker">
+        <MudContainer Class="details-container pa-0 my-4 d-flex flex-wrap flex-md-nowrap gap-4 ">
+            @if (tickerResultsLogoDto != null)
+            {
+                <MudStack Class="d-flex w-100" Spacing="4">
+                    <MudPaper Class="d-flex flex-wrap flex-md-nowrap justify-center pa-4 position-relative" Elevation="2">
+                        <MudToggleIconButton Toggled="@SubscribedTo" ToggledChanged="@ToggleWatchlistAsync"
+                                             Class="ma-2 position-absolute top-0 start-0"
+                                             Icon="@Icons.Material.Filled.FavoriteBorder" Title="Add to watchlist"
+                                             ToggledIcon="@Icons.Material.Filled.Favorite" ToggledTitle="Remove from watchlist"/>
+
+                        <MudPaper Class="d-flex mr-4 pa-2" Height="200px" Width="200px" Elevation="0">
+                            @if (tickerResultsLogoDto.LogoDto != null)
+                            {
+                                <MudImage Alt="Logo" Width="180" Height="180"
+                                          ObjectFit="ObjectFit.ScaleDown" Src="@ConvertToBase64(tickerResultsLogoDto.LogoDto)"/>
+                            }
+                        </MudPaper>
+                        @if (tickerResultsLogoDto.TickerResultsDto != null)
+                        {
+                            <MudContainer Class="d-flex pa-0 pa-md-auto">
+
+                                <StockOpenClose OnDateSelected="LoadChartDataAsync"/>
+
+                            </MudContainer>
+                        }
+                    </MudPaper>
+                    <MudPaper Elevation="2">
+                        <SfStockChart @ref="sfStockChart"
+                                      EnableSelector="false" EnablePeriodSelector="false"
+                                      Theme="@(IsDarkMode ? Theme.FluentDark : Theme.Fluent)">
+                            <StockChartChartBorder Color="transparent"></StockChartChartBorder>
+                            <StockChartPrimaryXAxis ValueType="ValueType.DateTimeCategory">
+                                <StockChartAxisMajorGridLines Width="0"></StockChartAxisMajorGridLines>
+                                <StockChartAxisMinorGridLines Width="0"></StockChartAxisMinorGridLines>
+                            </StockChartPrimaryXAxis>
+                            <StockChartSeriesCollection>
+                                <StockChartSeries DataSource="@StockChartDetails" Type="ChartSeriesType.Candle"
+                                                  Name="Series"
+                                                  XName="Date" YName="Close" High="High" Low="Low" Open="Open" Close="Close" Volume="Volume">
+                                </StockChartSeries>
+                            </StockChartSeriesCollection>
+                        </SfStockChart>
+                    </MudPaper>
+                </MudStack>
+                <MudPaper class="news-list overflow-scroll" Elevation="2">
+                    <ErrorBoundary>
+                        <ChildContent>
+                            <NewsList/>
+                        </ChildContent>
+                        <ErrorContent>
+                            <MudText Typo="Typo.body1">Unable to load present or cached news</MudText>
+                        </ErrorContent>
+                    </ErrorBoundary>
+                </MudPaper>
+            }
+        </MudContainer>
+    </CascadingValue>
+</CascadingValue>
+
+@code {
+
+    [Parameter] public string? SelectedTicker { get; set; }
+
+    [CascadingParameter]
+    public bool IsDarkMode
+    {
+        get => _isDarkMode;
+        set
+        {
+            _isDarkMode = value;
+            sfStockChart?.Refresh();
+        }
+    }
+
+    public List<StockChartDataDto>? StockChartDetails { get; set; }
+
+    public bool SubscribedTo { get; set; }
+
+    private TickerResultsLogoDto? tickerResultsLogoDto;
+
+    private DateTime? previousDateTime;
+
+    private string? previousTicker;
+
+    private SfStockChart? sfStockChart;
+
+    private bool _isDarkMode;
+
+    private async Task ToggleWatchlistAsync()
+    {
+        var username = await GetUsernameAsync();
+        var usernameJson = JsonSerializer.Serialize(username);
+        var content = new StringContent(usernameJson, Encoding.UTF8, "application/json");
+
+        try
+        {
+            if (SubscribedTo)
+            {
+                await Http.DeleteAsync($"api/tickers/{SelectedTicker}/users/{username!.Normalize()}/");
+            }
+            else
+            {
+                await Http.PostAsync($"api/tickers/{SelectedTicker}/users/", content);
+            }
+
+            await UpdateWatchlistStatusAsync();
+        }
+        catch (HttpRequestException)
+        {
+            Snackbar.Add("Unable to change watchlist status", Severity.Error);
+        }
+    }
+
+    private async Task<string?> GetUsernameAsync()
+    {
+        var state = await AuthStateProvider.GetAuthenticationStateAsync();
+        var username = state.User.Identity?.Name!.Replace("\'", "");
+        return username;
+    }
+
+    protected async Task LoadChartDataAsync((DateTime utcFrom, string timespan, int multiplier) selection)
+    {
+        // If date hasn't changed
+        if (selection.utcFrom.Date == previousDateTime.GetValueOrDefault().Date)
+        {
+            // And the details have been loaded previously
+            if (StockChartDetails != null && StockChartDetails.Count != 0)
+            {
+                // Don't fetch the same data again
+                return;
+            }
+        }
+
+        try
+        {
+            // utcFrom is already set back a selected amount
+            var fromUnix = ((DateTimeOffset)selection.utcFrom).ToUnixTimeMilliseconds();
+            var toUnix = DateTimeOffset.UtcNow.AddDays(-1).ToUnixTimeMilliseconds(); // today's data is not available so default is yesterday's
+
+            StockChartDetails = await Http.GetFromJsonAsync<List<StockChartDataDto>>(
+                $"api/Tickers/{SelectedTicker}/bars" +
+                $"?fromUnix={fromUnix}&toUnix={toUnix}" +
+                $"&timespan={selection.timespan}" +
+                $"&multiplier={selection.multiplier}");
+            previousDateTime = selection.utcFrom;
+        }
+        catch (HttpRequestException)
+        {
+            StockChartDetails?.Clear();
+            Snackbar.Add("Unable to get chart data. Try again later if requests exceeded.", Severity.Warning);
+        }
+
+        sfStockChart?.Refresh();
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (string.IsNullOrEmpty(SelectedTicker))
+        {
+            tickerResultsLogoDto = null;
+        }
+
+        // Don't perform the initial loading if the ticker parameter hasn't changed
+        if (SelectedTicker == previousTicker) return;
+
+        // Delete previous ticker's details to clear the page in case loading fails
+        StockChartDetails?.Clear();
+
+        // Fetch ticker details
+        try
+        {
+            await UpdateWatchlistStatusAsync();
+            tickerResultsLogoDto = await Http.GetFromJsonAsync<TickerResultsLogoDto>($"api/tickers/{SelectedTicker}");
+            // Load yesterday's data by default on ticker change
+            if (SelectedTicker != previousTicker)
+            {
+                await LoadChartDataAsync((DateTime.Now.AddDays(-1), "minute", 30));
+            }
+
+            previousTicker = SelectedTicker;
+        }
+        catch (HttpRequestException)
+        {
+            tickerResultsLogoDto = null;
+            throw new Exception("Unable to get present or cached ticker details");
+        }
+    }
+
+    private async Task UpdateWatchlistStatusAsync()
+    {
+        var username = await GetUsernameAsync();
+
+        try
+        {
+            var response = await Http.GetAsync($"api/users/{username}/watching/{SelectedTicker}");
+            SubscribedTo = response.IsSuccessStatusCode;
+        }
+        catch (HttpRequestException)
+        {
+            Snackbar.Add("Unable to refresh watchlist status", Severity.Error);
+        }
+    }
+
+}

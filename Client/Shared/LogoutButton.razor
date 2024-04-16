@@ -1,0 +1,24 @@
+﻿@using Microsoft.AspNetCore.Components.WebAssembly.Authentication
+@inject NavigationManager Navigation
+@inject SignOutSessionStateManager SignOutManager
+
+<AuthorizeView>
+    <Authorized>
+            @* <MudButton Variant="Variant.Filled" Color="Color.Primary" Link="authentication/profile">Hi, @context.User.Identity!.Name</MudButton> *@
+            <MudButton OnClick="@BeginSignOut"
+                       Variant="Variant.Filled" Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.Logout">
+                Log Out
+            </MudButton>
+    </Authorized>
+</AuthorizeView>
+
+@code {
+
+    private async Task BeginSignOut(MouseEventArgs args)
+    {
+        await SignOutManager.SetSignOutState();
+        Navigation.NavigateTo("authentication/logout");
+    }
+
+}

@@ -1,0 +1,33 @@
+﻿@inherits LayoutComponentBase
+
+<MudThemeProvider @ref="_mudThemeProvider" @bind-IsDarkMode="@_isDarkMode"/>
+<MudDialogProvider/>
+<MudSnackbarProvider/>
+<MudLayout>
+    <MudToggleIconButton @bind-Toggled="@_isDarkMode"
+                         Class="float-end mt-sm-4 mr-sm-4"
+                         Color="Color.Inherit"
+                         Icon="@Icons.Material.Filled.DarkMode"
+                         ToggledIcon="@Icons.Material.Filled.LightMode"/>
+    <MudMainContent>
+        <CascadingValue Value="@_isDarkMode">
+            <MudContainer Class="body-container" MaxWidth="MaxWidth.Large">
+                @Body
+            </MudContainer>
+        </CascadingValue>
+    </MudMainContent>
+</MudLayout>
+
+@code {
+    private bool _isDarkMode;
+    private MudThemeProvider _mudThemeProvider = null!;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _isDarkMode = await _mudThemeProvider.GetSystemPreference();
+            StateHasChanged();
+        }
+    }
+}

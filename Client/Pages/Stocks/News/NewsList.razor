@@ -1,0 +1,43 @@
+﻿@using FinanceApp.Shared.Models.News
+@inject HttpClient Http
+@inject ISnackbar Snackbar
+
+@if (NewsResultImageDtos != null)
+{
+    <MudStack>
+        @foreach (var itemDto in NewsResultImageDtos)
+        {
+            <NewsItem ItemDto="itemDto"></NewsItem>
+        }
+    </MudStack>
+}
+else
+{
+    {
+        <MudText Class="pa-4" Typo="Typo.body1">Loading news...</MudText>
+    }
+}
+
+@code {
+
+    [CascadingParameter(Name = "SelectedTicker")]
+    public string? SelectedTicker { get; set; }
+
+    private const int NewsCount = 5;
+
+    private IEnumerable<NewsResultImageDto>? NewsResultImageDtos { get; set; }
+    
+    protected override async Task OnParametersSetAsync()
+    {
+        try
+        {
+            NewsResultImageDtos = await Http.GetFromJsonAsync<IEnumerable<NewsResultImageDto>>(
+                $"api/Tickers/{SelectedTicker}/news?count={NewsCount}");
+        }
+        catch (HttpRequestException)
+        {
+            NewsResultImageDtos = null;
+            Snackbar.Add("Unable to get news. Try again later if requests exceeded.", Severity.Warning);
+        }
+    }
+}

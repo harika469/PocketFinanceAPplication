@@ -1,0 +1,131 @@
+﻿@inject HttpClient Http
+@inject AuthenticationStateProvider AuthStateProvider
+@inject IDialogService DialogService
+
+@page "/watchlist"
+@using FinanceApp.Shared.Models.TickerDetails
+@using System.Globalization
+@inherits FinanceApp.Client.Pages.Utilities.ImageDecoder
+<div class="d-flex align-start justify-space-between mb-6">
+    <MudText Typo="Typo.h3">Watchlist</MudText>
+    <MudButton Href="/" Variant="Variant.Filled" Color="Color.Primary"
+               StartIcon="@Icons.Material.Filled.Close">
+        Close
+    </MudButton>
+</div>
+
+@if (TickerLogoDtoList != null)
+{
+    <MudTable T="TickerResultsLogoDto" Items="@TickerLogoDtoList"
+              Filter="new Func<TickerResultsLogoDto, bool>(TickerFilterFunc)">
+        <ToolBarContent>
+            <MudTextField T="string" @bind-value="tickerSearchString" Placeholder="Filter"
+                          Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                          IconSize="Size.Medium"/>
+        </ToolBarContent>
+        <HeaderContent>
+            <MudTh>Logo</MudTh>
+            <MudTh>
+                <MudTableSortLabel SortBy="new Func<TickerResultsLogoDto, object>(t => t.TickerResultsDto?.Ticker!)">Ticker</MudTableSortLabel>
+            </MudTh>
+            <MudTh>
+                <MudTableSortLabel SortBy="new Func<TickerResultsLogoDto, object>(t => t.TickerResultsDto?.Name!)">Name</MudTableSortLabel>
+            </MudTh>
+            <MudTh>
+                <MudTableSortLabel SortBy="new Func<TickerResultsLogoDto, object>(t => t.TickerResultsDto?.PrimaryExchange!)">Primary exchange</MudTableSortLabel>
+            </MudTh>
+            <MudTh>
+                <MudTableSortLabel SortBy="new Func<TickerResultsLogoDto, object>(t => t.TickerResultsDto?.MarketCap!)">Market cap</MudTableSortLabel>
+            </MudTh>
+            <MudTh>Actions</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Logo">
+                @if (context.LogoDto != null)
+                {
+                    <MudImage Alt="Logo" Width="100" Height="100" Class="pa-1"
+                              ObjectFit="ObjectFit.ScaleDown" Src="@ConvertToBase64(context.LogoDto!)"/>
+                }
+            </MudTd>
+            <MudTd DataLabel="Ticker"> @(context.TickerResultsDto != null ? context.TickerResultsDto.Ticker : "")</MudTd>
+            <MudTd DataLabel="Name">@(context.TickerResultsDto != null ? context.TickerResultsDto.Name : "")</MudTd>
+            <MudTd DataLabel="Primary exchange">@(context.TickerResultsDto?.PrimaryExchange ?? "")</MudTd>
+                <MudTd DataLabel="Market cap"> @(context.TickerResultsDto?.MarketCap != null ? context.TickerResultsDto?.MarketCap?.ToString("C2", new CultureInfo("en-US")) : "")</MudTd>
+            <MudTd>
+                <MudButton OnClick="@(() => OpenDeleteDialogAsync(context.TickerResultsDto?.Ticker))"
+                           Variant="Variant.Outlined" Color="Color.Error">
+                    Delete
+                </MudButton>
+            </MudTd>
+        </RowTemplate>
+        <PagerContent>
+            <MudTablePager PageSizeOptions="new[] { 5, 10 }"/>
+        </PagerContent>
+    </MudTable>
+}
+else
+{
+    <MudText Typo="Typo.subtitle1">Loading watchlist...</MudText>
+}
+
+@code {
+
+    [Parameter]
+    public IList<TickerResultsLogoDto>? TickerLogoDtoList { get; set; }
+
+    private string tickerSearchString = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var username = await GetUsernameAsync();
+        try
+        {
+            TickerLogoDtoList = await Http.GetFromJsonAsync<IList<TickerResultsLogoDto>>(
+                $"api/Users/{username}/watchlist-logos/");
+        }
+        catch (HttpRequestException)
+        {
+            TickerLogoDtoList = null;
+            throw;
+        }
+    }
+
+    private async Task<string?> GetUsernameAsync()
+    {
+        var state = await AuthStateProvider.GetAuthenticationStateAsync();
+        var username = state.User.Identity?.Name!.Replace("\'", "");
+        return username;
+    }
+
+    private bool TickerFilterFunc(TickerResultsLogoDto t)
+    {
+        return FilterFunc(t, tickerSearchString);
+    }
+
+    private static bool FilterFunc(TickerResultsLogoDto t, string searchString)
+    {
+        if (string.IsNullOrWhiteSpace(searchString))
+            return true;
+        if (t.TickerResultsDto!.Ticker.Contains(searchString, StringComparison.OrdinalIgnoreCase))
+            return true;
+        if (t.TickerResultsDto!.Name.Contains(searchString, StringComparison.OrdinalIgnoreCase))
+            return true;
+        if (t.TickerResultsDto.PrimaryExchange != null && t.TickerResultsDto.PrimaryExchange.Contains(searchString))
+            return true;
+        return false;
+    }
+
+    private async Task OpenDeleteDialogAsync(string? ticker)
+    {
+        var username = await GetUsernameAsync();
+        var parameters = new DialogParameters { ["Ticker"] = ticker, ["Username"] = username };
+        var dialog = await DialogService.ShowAsync<RemoveDialog>("Delete ticker", parameters);
+        var result = await dialog.Result;
+
+        if (!result.Canceled)
+        {
+            TickerLogoDtoList?.Remove(TickerLogoDtoList.Single(t => t.TickerResultsDto?.Ticker == ticker));
+        }
+    }
+
+}

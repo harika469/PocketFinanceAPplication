@@ -1,0 +1,120 @@
+﻿@using FinanceApp.Shared.Models
+@inject HttpClient Http
+@inject ISnackbar Snackbar
+
+<MudStack Class="align-start">
+    <MudButtonGroup Class="my-2 align-center" Variant="Variant.Filled" OverrideStyles="false">
+        <MudButton @ref="buttonDay" Color="@ColorButton(buttonDay)" @onclick="@(args => DateSelected(args, DateTime.UtcNow.AddDays(-1), "minute", 30, buttonDay))">Last day</MudButton>
+        <MudButton @ref="buttonWeek" Color="@ColorButton(buttonWeek)" @onclick="@(args => DateSelected(args, DateTime.UtcNow.AddDays(-7), "hour", 3, buttonWeek))">1 week ago</MudButton>
+        <MudButton @ref="buttonMonth" Color="@ColorButton(buttonMonth)" @onclick="@(args => DateSelected(args, DateTime.UtcNow.AddMonths(-1), "day", 1, buttonMonth))">1 month ago</MudButton>
+        <MudButton @ref="buttonThreeMonths" Color="@ColorButton(buttonThreeMonths)" @onclick="@(args => DateSelected(args, DateTime.UtcNow.AddMonths(-3), "week", 1, buttonThreeMonths))">3 months ago</MudButton>
+    </MudButtonGroup>
+
+    @if (dailyOpenClose != null)
+    {
+        <MudGrid Spacing="2">
+            @foreach (var property in dailyOpenClose.GetType().GetProperties())
+            {
+                @if (property.Name == "Status") continue;
+                <MudItem xs="6" sm="4">
+                    <MudPaper Elevation="1" Class="d-flex justify-space-between px-2 py-1">
+                        <MudText Style="opacity: 0.8">@property.Name</MudText>
+                        <MudText>
+                            <b>@property.GetValue(dailyOpenClose)</b>
+                        </MudText>
+                    </MudPaper>
+                </MudItem>
+            }
+        </MudGrid>
+    }
+    else
+    {
+        <MudText Typo="Typo.body1">No data available for selected date</MudText>
+    }
+</MudStack>
+
+
+@code {
+
+    [CascadingParameter(Name = "SelectedTicker")]
+    public string? SelectedTicker { get; set; }
+
+    [CascadingParameter(Name = "PreviousTicker")]
+    public string? PreviousTicker { get; set; }
+
+    MudButton? buttonDay, buttonWeek, buttonMonth, buttonThreeMonths;
+
+    MudButton? highlightedButton;
+
+    [Parameter] public EventCallback<(DateTime, string, int)> OnDateSelected { get; set; }
+
+    private DateTime previousDateTime;
+
+    private DailyOpenCloseDto? dailyOpenClose;
+
+    private async Task DateSelected(MouseEventArgs e, DateTime date, string timespan, int multiplier, MudButton? button)
+    {
+        date = SkipIfWeekend(date);
+        highlightedButton = button;
+        await OnDateSelected.InvokeAsync((date, timespan, multiplier));
+        await UpdateOpenCloseAsync(date);
+    }
+
+    private DateTime SkipIfWeekend(DateTime date)
+    {
+        if (date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday)
+        {
+            Snackbar.Add("Weekend date selected, skipping to previous available data", Severity.Info);
+            date = date.DayOfWeek switch
+            {
+                DayOfWeek.Saturday => date.AddDays(-1),
+                DayOfWeek.Sunday => date.AddDays(-2),
+                _ => date
+            };
+        }
+
+        return date;
+    }
+
+    private async Task UpdateOpenCloseAsync(DateTime date)
+    {
+        if (date.Date == previousDateTime.Date && dailyOpenClose != null && SelectedTicker == PreviousTicker)
+        {
+            return;
+        }
+
+        try
+        {
+            dailyOpenClose = await Http.GetFromJsonAsync<DailyOpenCloseDto>($"api/tickers/{SelectedTicker}/open-close/{date:yyyy-MM-dd}");
+            previousDateTime = date;
+        }
+        catch (HttpRequestException)
+        {
+            dailyOpenClose = null;
+            Snackbar.Add("Unable to get stock details. Try again later if requests exceeded.", Severity.Warning);
+        }
+    }
+
+    private Color ColorButton(MudButton? button)
+    {
+        return button == highlightedButton ? Color.Secondary : Color.Default;
+    }
+
+    // Here the logic is split into two lifecycle methods because of
+    // OnDateSelected which is a complex parameter and so it triggers OnParametersSetAsync on each update.
+    // To prevent unnecessary calls a manual check is made to see if the ticker has changed.
+
+    protected override async Task OnInitializedAsync()
+    {
+        var yesterday = DateTime.Now.AddDays(-1);
+        await UpdateOpenCloseAsync(SkipIfWeekend(yesterday));
+        highlightedButton = buttonDay;
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (SelectedTicker == null || SelectedTicker == PreviousTicker) return;
+        await OnInitializedAsync();
+    }
+
+}
