@@ -10,7 +10,10 @@ This is a Blazor WebAssembly application that can fetch, display and store data 
 ## Prerequicites 
 - Please make sure  to create localhost sql server on your machine
 - create finance-prod db in that
-- change the connection string in  
+- change the connection string in  https://github.com/harika469/PocketFinanceAPplication/blob/master/Server/appsettings.json
+- Also change teh Polygon API key  in the appsettings.json file
+- Run the code and make sure to verify the Database if all the tables are created or not
+  
 
 ## Credits
 + https://polygon.io/ - financial data
