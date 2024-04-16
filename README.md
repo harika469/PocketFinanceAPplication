@@ -7,6 +7,10 @@ This is a Blazor WebAssembly application that can fetch, display and store data 
 - The cached data, as well as user accounts and their followed tickers are stored in a local MS SQL database.
 
 - Entity Framework is used for database management.
+## Prerequicites 
+- Please make sure  to create localhost sql server on your machine
+- create finance-prod db in that
+- change the connection string in  
 
 ## Credits
 + https://polygon.io/ - financial data
